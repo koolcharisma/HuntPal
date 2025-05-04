@@ -1,20 +1,13 @@
-# app.py
-
 import streamlit as st
+import logging
 import importlib
 from pathlib import Path
-import logging
 
-# ── 1. Configure logging ──────────────────────────────────────────────────────
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(message)s",
-)
-
-# ── 2. Load and validate API keys ─────────────────────────────────────────────
+# —— Load API keys ——
 openai_key  = st.secrets.get("OPENAI_API_KEY")
 serpapi_key = st.secrets.get("SERPAPI_KEY")
 
+# —— Logging & feedback ——
 if openai_key:
     logging.info("✅ OPENAI_API_KEY loaded successfully.")
 else:
@@ -32,58 +25,73 @@ else:
         st.error("Missing OPENAI_API_KEY in secrets.toml.")
     if not serpapi_key:
         st.error("Missing SERPAPI_KEY in secrets.toml.")
-    st.stop()  # stop the app if keys are missing
+    st.stop()
 
-# ── 3. App title ────────────────────────────────────────────────────────────────
-st.title("Company Research Assistant")
+# —— Define SerpAPI functions ——
+def fetch_headlines(company: str, api_key: str, num: int = 3) -> list[str]:
+    """
+    Fetch top news headlines for a company using SerpAPI.
+    """
+    from serpapi import GoogleSearch
 
-# ── 4. Ensure research_models.py exists ────────────────────────────────────────
+    params = {
+        "engine": "google_news",
+        "q": company,
+        "api_key": api_key,
+        "num": num
+    }
+    search = GoogleSearch(params)
+    data = search.get_dict()
+    headlines = [item.get("title", "") for item in data.get("news_results", [])]
+    return headlines
+
+# —— Define OpenAI functions ——
+def generate_overview(company: str, api_key: str, engine: str = "text-davinci-003") -> str:
+    """
+    Generate a concise company overview using OpenAI.
+    """
+    import openai
+    openai.api_key = api_key
+
+    prompt = (
+        f"Provide a concise overview of {company}, including its industry, headquarters, and recent news highlights."
+    )
+    resp = openai.Completion.create(
+        engine=engine,
+        prompt=prompt,
+        max_tokens=200
+    )
+    return resp.choices[0].text.strip()
+
+# —— Sidebar: Edit research_models.py (optional) ——
 models_path = Path("research_models.py")
 if not models_path.exists():
     models_path.write_text(
-        "# your research logic goes here\n"
+        "# Move custom multi-prompt logic here\n"
         "def run_research(company, openai_key, serpapi_key):\n"
-        "    # TODO: implement multi-prompt flows\n"
-        "    return {'overview': '…', 'headlines': []}\n"
+        "    # Example combining fetch_headlines + generate_overview\n"
+        "    return {\"headlines\": fetch_headlines(company, serpapi_key), \"overview\": generate_overview(company, openai_key)}\n"
     )
-
-# ── 5. Sidebar editor for research_models.py ──────────────────────────────────
 st.sidebar.header("⚙️ Edit Research Models")
 source_code = models_path.read_text()
-edited = st.sidebar.text_area(
-    "research_models.py", source_code, height=400
-)
+edited = st.sidebar.text_area("research_models.py", source_code, height=300)
 if st.sidebar.button("Save & Reload"):
     models_path.write_text(edited)
     importlib.invalidate_caches()
-    import research_models  # noqa: F401
+    import research_models
     importlib.reload(research_models)
-    st.sidebar.success("Reloaded research_models.py!")
+    st.sidebar.success("Reloaded!")
 
-# ── 6. Main UI: run research with error handling ───────────────────────────────
+# —— Main UI ——
+st.title("Company Research Assistant")
 company = st.text_input("Enter a company name", placeholder="e.g. Acme Corp")
-if st.button("Run Research") and company:
-    import research_models  # noqa: F401
+if st.button("Fetch Headlines") and company:
+    headlines = fetch_headlines(company, serpapi_key)
+    st.subheader("Top News Headlines")
+    for idx, h in enumerate(headlines, 1):
+        st.write(f"{idx}. {h}")
 
-    try:
-        results = research_models.run_research(company, openai_key, serpapi_key)
-    except Exception as e:
-        logging.exception("Research API call failed")
-        st.error(f"❌ Research failed: {e}")
-    else:
-        # Headlines
-        st.subheader("Top News Headlines")
-        headlines = results.get("headlines") or []
-        if headlines:
-            for i, h in enumerate(headlines, 1):
-                st.write(f"{i}. {h}")
-        else:
-            st.warning("No headlines returned.")
-
-        # Overview
-        st.subheader("AI‑Generated Overview")
-        overview = results.get("overview")
-        if overview:
-            st.write(overview)
-        else:
-            st.warning("No overview returned.")
+if st.button("Generate Overview") and company:
+    overview = generate_overview(company, openai_key)
+    st.subheader("AI‑Generated Overview")
+    st.write(overview)
