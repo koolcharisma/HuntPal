@@ -1,16 +1,17 @@
 import streamlit as st
 import logging
-import importlib.util
-from serpapi import GoogleSearch
 import openai
 
-# —— 0) Runtime dependency check ——
-if importlib.util.find_spec("serpapi.GoogleSearch") is None:
-    st.error("🔴 GoogleSearch NOT found—ensure 'google-search-results' is in requirements.txt")
-else:
+# —— 0) Runtime dependency check —— 
+# Use try/except to verify GoogleSearch import
+try:
+    from serpapi import GoogleSearch
     st.success("✅ GoogleSearch is available")
+except ImportError:
+    st.error("🔴 GoogleSearch NOT found—ensure 'google-search-results' is in requirements.txt")
+    st.stop()
 
-# —— 1) SerpAPI function ——
+# —— 1) SerpAPI function —— 
 def fetch_headlines(company: str, serpapi_key: str, num: int = 3) -> list[str]:
     """Return top news headlines for a company via SerpAPI."""
     if not serpapi_key:
@@ -20,7 +21,7 @@ def fetch_headlines(company: str, serpapi_key: str, num: int = 3) -> list[str]:
     data = search.get_dict()
     return [item.get("title", "") for item in data.get("news_results", [])]
 
-# —— 2) OpenAI function ——
+# —— 2) OpenAI function —— 
 def generate_overview(company: str, openai_key: str) -> str:
     """Return a concise company overview via OpenAI."""
     if not openai_key:
@@ -39,7 +40,7 @@ Provide a concise overview of {company}, including:
     )
     return resp.choices[0].text.strip()
 
-# —— 3) Load keys & logging ——
+# —— 3) Load keys & logging —— 
 openai_key = st.secrets.get("OPENAI_API_KEY")
 serpapi_key = st.secrets.get("SERPAPI_KEY")
 
@@ -47,6 +48,8 @@ if openai_key:
     logging.info("✅ OPENAI_API_KEY loaded")
 else:
     logging.error("❌ OPENAI_API_KEY missing")
+    st.error("Missing OPENAI_API_KEY—check secrets")
+    st.stop()
 
 if serpapi_key:
     logging.info("✅ SERPAPI_KEY loaded")
@@ -55,7 +58,7 @@ else:
     st.error("Missing SERPAPI_KEY—check secrets")
     st.stop()
 
-# —— 4) Streamlit UI ——
+# —— 4) Streamlit UI —— 
 st.title("Company Research Assistant")
 company = st.text_input("Enter a company name", placeholder="e.g. Acme Corp")
 
