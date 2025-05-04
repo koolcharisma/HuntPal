@@ -1,4 +1,11 @@
 import streamlit as st
+import importlib.util
+
+if importlib.util.find_spec("serpapi.GoogleSearch") is None:
+    st.error("🔴 GoogleSearch NOT found—check that google‑search‑results is in requirements.txt")
+else:
+    st.success("✅ GoogleSearch is available")
+
 import logging
 import importlib
 from pathlib import Path
