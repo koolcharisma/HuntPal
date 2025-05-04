@@ -70,3 +70,12 @@ if st.button("Run Research") and company:
 
     st.subheader("AI‑Generated Overview")
     st.write(results.get("overview", "No overview returned."))
+
+        try:
+        results = research_models.run_research(company, openai_key, serpapi_key)
+        st.write("RAW RESULTS:", results)
+    except Exception as e:
+        st.error(f"Error during research: {e}")
+        raise
+
+    
