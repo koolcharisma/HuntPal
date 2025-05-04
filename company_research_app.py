@@ -1,15 +1,20 @@
 # app.py
-import streamlit as st
-import importlib, inspect
-from pathlib import Path
 
+import streamlit as st
+import importlib
+from pathlib import Path
 import logging
 
-# Attempt to read each key (returns None if not present)
+# ── 1. Configure logging ──────────────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+)
+
+# ── 2. Load and validate API keys ─────────────────────────────────────────────
 openai_key  = st.secrets.get("OPENAI_API_KEY")
 serpapi_key = st.secrets.get("SERPAPI_KEY")
 
-# Check and report each key
 if openai_key:
     logging.info("✅ OPENAI_API_KEY loaded successfully.")
 else:
@@ -20,7 +25,6 @@ if serpapi_key:
 else:
     logging.error("❌ SERPAPI_KEY is missing!")
 
-# Streamlit user feedback
 if openai_key and serpapi_key:
     st.success("All API keys successfully loaded from secrets.toml!")
 else:
@@ -28,14 +32,12 @@ else:
         st.error("Missing OPENAI_API_KEY in secrets.toml.")
     if not serpapi_key:
         st.error("Missing SERPAPI_KEY in secrets.toml.")
-    # Optionally halt further execution if critical
-    st.stop()
+    st.stop()  # stop the app if keys are missing
 
-
-
+# ── 3. App title ────────────────────────────────────────────────────────────────
 st.title("Company Research Assistant")
 
-# —— 2. Load or create research_models.py if missing ——
+# ── 4. Ensure research_models.py exists ────────────────────────────────────────
 models_path = Path("research_models.py")
 if not models_path.exists():
     models_path.write_text(
@@ -45,7 +47,7 @@ if not models_path.exists():
         "    return {'overview': '…', 'headlines': []}\n"
     )
 
-# —— 3. Show an editor for the research_models.py source ——
+# ── 5. Sidebar editor for research_models.py ──────────────────────────────────
 st.sidebar.header("⚙️ Edit Research Models")
 source_code = models_path.read_text()
 edited = st.sidebar.text_area(
@@ -54,28 +56,34 @@ edited = st.sidebar.text_area(
 if st.sidebar.button("Save & Reload"):
     models_path.write_text(edited)
     importlib.invalidate_caches()
-    import research_models
+    import research_models  # noqa: F401
     importlib.reload(research_models)
-    st.sidebar.success("Reloaded!")
+    st.sidebar.success("Reloaded research_models.py!")
 
-# —— 4. Main UI: run research —— 
+# ── 6. Main UI: run research with error handling ───────────────────────────────
 company = st.text_input("Enter a company name", placeholder="e.g. Acme Corp")
 if st.button("Run Research") and company:
-    import research_models
-    results = research_models.run_research(company, openai_key, serpapi_key)
+    import research_models  # noqa: F401
 
-    st.subheader("Top News Headlines")
-    for idx, h in enumerate(results.get("headlines", []), 1):
-        st.write(f"{idx}. {h}")
-
-    st.subheader("AI‑Generated Overview")
-    st.write(results.get("overview", "No overview returned."))
-
-        try:
+    try:
         results = research_models.run_research(company, openai_key, serpapi_key)
-        st.write("RAW RESULTS:", results)
     except Exception as e:
-        st.error(f"Error during research: {e}")
-        raise
+        logging.exception("Research API call failed")
+        st.error(f"❌ Research failed: {e}")
+    else:
+        # Headlines
+        st.subheader("Top News Headlines")
+        headlines = results.get("headlines") or []
+        if headlines:
+            for i, h in enumerate(headlines, 1):
+                st.write(f"{i}. {h}")
+        else:
+            st.warning("No headlines returned.")
 
-    
+        # Overview
+        st.subheader("AI‑Generated Overview")
+        overview = results.get("overview")
+        if overview:
+            st.write(overview)
+        else:
+            st.warning("No overview returned.")
