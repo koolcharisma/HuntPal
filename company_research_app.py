@@ -3,9 +3,35 @@ import streamlit as st
 import importlib, inspect
 from pathlib import Path
 
-# —— 1. Load API keys ——
-openai_key = st.secrets["OPENAI_API_KEY"]
-serpapi_key = st.secrets["SERPAPI_KEY"]
+import logging
+
+# Attempt to read each key (returns None if not present)
+openai_key  = st.secrets.get("OPENAI_API_KEY")
+serpapi_key = st.secrets.get("SERPAPI_KEY")
+
+# Check and report each key
+if openai_key:
+    logging.info("✅ OPENAI_API_KEY loaded successfully.")
+else:
+    logging.error("❌ OPENAI_API_KEY is missing!")
+
+if serpapi_key:
+    logging.info("✅ SERPAPI_KEY loaded successfully.")
+else:
+    logging.error("❌ SERPAPI_KEY is missing!")
+
+# Streamlit user feedback
+if openai_key and serpapi_key:
+    st.success("All API keys successfully loaded from secrets.toml!")
+else:
+    if not openai_key:
+        st.error("Missing OPENAI_API_KEY in secrets.toml.")
+    if not serpapi_key:
+        st.error("Missing SERPAPI_KEY in secrets.toml.")
+    # Optionally halt further execution if critical
+    st.stop()
+
+
 
 st.title("Company Research Assistant")
 
