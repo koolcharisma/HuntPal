@@ -2,8 +2,7 @@ import streamlit as st
 import logging
 import openai
 
-# —— 0) Runtime dependency check —— 
-# Use try/except to verify GoogleSearch import
+# —— 0) Runtime dependency check ——
 try:
     from serpapi import GoogleSearch
     st.success("✅ GoogleSearch is available")
@@ -11,17 +10,24 @@ except ImportError:
     st.error("🔴 GoogleSearch NOT found—ensure 'google-search-results' is in requirements.txt")
     st.stop()
 
-# —— 1) SerpAPI function —— 
+# —— 1) SerpAPI function ——
 def fetch_headlines(company: str, serpapi_key: str, num: int = 3) -> list[str]:
-    """Return top news headlines for a company via SerpAPI."""
+    """Return top news headlines for a company via SerpAPI (Google News)."""
     if not serpapi_key:
         raise ValueError("SERPAPI_KEY is missing!")
-    params = {"engine": "google_news", "q": company, "api_key": serpapi_key, "num": num}
+    params = {
+        "engine": "google",   # use Google engine
+        "tbm": "nws",         # news tab
+        "q": company,
+        "api_key": serpapi_key,
+        "num": num
+    }
     search = GoogleSearch(params)
     data = search.get_dict()
-    return [item.get("title", "") for item in data.get("news_results", [])]
+    news = data.get("news_results", [])
+    return [item.get("title", "") for item in news], data
 
-# —— 2) OpenAI function —— 
+# —— 2) OpenAI function ——
 def generate_overview(company: str, openai_key: str) -> str:
     """Return a concise company overview via OpenAI."""
     if not openai_key:
@@ -40,25 +46,18 @@ Provide a concise overview of {company}, including:
     )
     return resp.choices[0].text.strip()
 
-# —— 3) Load keys & logging —— 
+# —— 3) Load keys & logging ——
 openai_key = st.secrets.get("OPENAI_API_KEY")
 serpapi_key = st.secrets.get("SERPAPI_KEY")
 
-if openai_key:
-    logging.info("✅ OPENAI_API_KEY loaded")
-else:
-    logging.error("❌ OPENAI_API_KEY missing")
+if not openai_key:
     st.error("Missing OPENAI_API_KEY—check secrets")
     st.stop()
-
-if serpapi_key:
-    logging.info("✅ SERPAPI_KEY loaded")
-else:
-    logging.error("❌ SERPAPI_KEY missing")
+if not serpapi_key:
     st.error("Missing SERPAPI_KEY—check secrets")
     st.stop()
 
-# —— 4) Streamlit UI —— 
+# —— 4) Streamlit UI ——
 st.title("Company Research Assistant")
 company = st.text_input("Enter a company name", placeholder="e.g. Acme Corp")
 
@@ -66,10 +65,15 @@ col1, col2 = st.columns(2)
 with col1:
     if st.button("Get News Headlines") and company:
         try:
-            headlines = fetch_headlines(company, serpapi_key)
-            st.subheader("News Headlines")
-            for i, h in enumerate(headlines, 1):
-                st.write(f"{i}. {h}")
+            headlines, raw = fetch_headlines(company, serpapi_key)
+            if headlines:
+                st.subheader("News Headlines")
+                for i, h in enumerate(headlines, 1):
+                    st.write(f"{i}. {h}")
+            else:
+                st.warning("No headlines found.")
+                st.subheader("Raw SerpAPI response")
+                st.json(raw)
         except Exception as e:
             st.error(f"Error fetching headlines: {e}")
 
