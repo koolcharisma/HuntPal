@@ -1,42 +1,46 @@
+# app.py
 import streamlit as st
-from serpapi import GoogleSearch
-import openai
+import importlib, inspect
+from pathlib import Path
 
-# —— 1. Load API keys from Streamlit secrets —— 
-openai.api_key = st.secrets["OPENAI_API_KEY"]
-SERPAPI_KEY = st.secrets["SERPAPI_KEY"]
+# —— 1. Load API keys ——
+openai_key = st.secrets["OPENAI_API_KEY"]
+serpapi_key = st.secrets["SERPAPI_KEY"]
 
-# —— 2. UI: Company name input & button —— 
 st.title("Company Research Assistant")
+
+# —— 2. Load or create research_models.py if missing ——
+models_path = Path("research_models.py")
+if not models_path.exists():
+    models_path.write_text(
+        "# your research logic goes here\n"
+        "def run_research(company, openai_key, serpapi_key):\n"
+        "    # TODO: implement multi-prompt flows\n"
+        "    return {'overview': '…', 'headlines': []}\n"
+    )
+
+# —— 3. Show an editor for the research_models.py source ——
+st.sidebar.header("⚙️ Edit Research Models")
+source_code = models_path.read_text()
+edited = st.sidebar.text_area(
+    "research_models.py", source_code, height=400
+)
+if st.sidebar.button("Save & Reload"):
+    models_path.write_text(edited)
+    importlib.invalidate_caches()
+    import research_models
+    importlib.reload(research_models)
+    st.sidebar.success("Reloaded!")
+
+# —— 4. Main UI: run research —— 
 company = st.text_input("Enter a company name", placeholder="e.g. Acme Corp")
 if st.button("Run Research") and company:
-
-    # —— 3. SerpAPI: fetch top 3 news headlines —— 
-    params = {
-        "engine": "google_news",
-        "q": company,
-        "api_key": SERPAPI_KEY,
-        "num": 3
-    }
-    search = GoogleSearch(params)
-    results = search.get_dict().get("news_results", [])
-    headlines = [n["title"] for n in results]
+    import research_models
+    results = research_models.run_research(company, openai_key, serpapi_key)
 
     st.subheader("Top News Headlines")
-    for idx, h in enumerate(headlines, 1):
+    for idx, h in enumerate(results.get("headlines", []), 1):
         st.write(f"{idx}. {h}")
 
-    # —— 4. OpenAI: generate company overview —— 
-    prompt = (
-        f"Provide a concise overview of {company}, "
-        "including its industry, headquarters, and recent news highlights."
-    )
-    resp = openai.Completion.create(
-        engine="text-davinci-003",
-        prompt=prompt,
-        max_tokens=200
-    )
-    overview = resp.choices[0].text.strip()
-
     st.subheader("AI‑Generated Overview")
-    st.write(overview)
+    st.write(results.get("overview", "No overview returned."))
